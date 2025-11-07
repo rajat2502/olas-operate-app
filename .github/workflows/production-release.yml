@@ -17,47 +17,18 @@ jobs:
       version_strategy: production
     secrets: inherit
 
-  production-release:
+  run-release:
     needs: calculate-version
     if: ${{ github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip release]') }}
-    runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ needs.calculate-version.outputs.new_tag }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-
-      - name: Create and push signed tag
-        run: |
-          TAG_NAME="${{ needs.calculate-version.outputs.new_tag }}"
-          git tag -a "$TAG_NAME" -m "Production Release $TAG_NAME"
-          git push origin "$TAG_NAME"
-          echo "Created and pushed tag: $TAG_NAME"
-
-      - name: Summary
-        run: |
-          echo "## 🚀 Production RC tagged" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${{ needs.calculate-version.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag:** \`${{ needs.calculate-version.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
-
-
-  run-release:
-    needs: production-release
     uses: ./.github/workflows/release.yml
     with:
-      tag: ${{ needs.production-release.outputs.new_tag }}
+      tag: ${{ needs.calculate-version.outputs.new_tag }}
     secrets: inherit
 
   run-release-win:
-    needs: production-release
+    needs: calculate-version
+    if: ${{ github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip release]') }}
     uses: ./.github/workflows/release_win.yml
     with:
-      tag: ${{ needs.production-release.outputs.new_tag }}
+      tag: ${{ needs.calculate-version.outputs.new_tag }}
     secrets: inherit

@@ -89,13 +89,17 @@ jobs:
           STRATEGY="${{ inputs.version_strategy }}"
           BASE_VERSION="${{ steps.pkg-version.outputs.base_version }}"
           
-          # Set tag suffix and commit message suffix based on strategy
+          # Set tag suffix, commit message suffix, delete tag flag, and message prefix based on strategy
           if [ "$STRATEGY" = "production" ]; then
             TAG_SUFFIX="-signed"
             COMMIT_SUFFIX="[skip release]"
+            DELETE_EXISTING_TAG="false"
+            TAG_MESSAGE_PREFIX="Production Release"
           else
             TAG_SUFFIX=""
             COMMIT_SUFFIX=""
+            DELETE_EXISTING_TAG="true"
+            TAG_MESSAGE_PREFIX="Feature Release"
           fi
           
           if [ "$STRATEGY" = "production" ]; then
@@ -121,6 +125,8 @@ jobs:
           echo "new_tag=$NEW_TAG" | tee -a $GITHUB_OUTPUT
           echo "new_rc_number=$NEW_RC_NUMBER" | tee -a $GITHUB_OUTPUT
           echo "commit_suffix=$COMMIT_SUFFIX" | tee -a $GITHUB_OUTPUT
+          echo "delete_existing_tag=$DELETE_EXISTING_TAG" | tee -a $GITHUB_OUTPUT
+          echo "tag_message_prefix=$TAG_MESSAGE_PREFIX" | tee -a $GITHUB_OUTPUT
 
       - name: Update package.json version
         run: |
@@ -165,4 +171,28 @@ jobs:
             fi
             git push origin "$PUSH_BRANCH"
           fi
+
+      - name: Create and push tag
+        run: |
+          TAG_NAME="${{ steps.calculate-version.outputs.new_tag }}"
+          TAG_MESSAGE_PREFIX="${{ steps.calculate-version.outputs.tag_message_prefix }}"
+          DELETE_EXISTING_TAG="${{ steps.calculate-version.outputs.delete_existing_tag }}"
+          
+          # Validate tag name is not empty
+          if [ -z "$TAG_NAME" ]; then
+            echo "Error: TAG_NAME is empty. Cannot create tag."
+            exit 1
+          fi
+          
+          # Delete tag locally if it exists (for feature releases)
+          if [ "$DELETE_EXISTING_TAG" = "true" ]; then
+            git tag -d "$TAG_NAME" 2>/dev/null || true
+            # Delete tag remotely if it exists
+            git push origin --delete "$TAG_NAME" 2>/dev/null || true
+          fi
+          
+          # Create and push the new tag
+          git tag -a "$TAG_NAME" -m "$TAG_MESSAGE_PREFIX $TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "Created and pushed tag: $TAG_NAME"
 
