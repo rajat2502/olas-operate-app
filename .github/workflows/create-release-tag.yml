@@ -12,6 +12,13 @@ on:
         description: 'Version calculation strategy: increment, override, or production'
         required: true
         type: string
+    outputs:
+      new_tag:
+        description: 'The newly calculated tag name'
+        value: ${{ jobs.create-release-tag.outputs.new_tag }}
+      new_version:
+        description: 'The newly calculated version'
+        value: ${{ jobs.create-release-tag.outputs.new_version }}
 
 permissions:
   contents: write
