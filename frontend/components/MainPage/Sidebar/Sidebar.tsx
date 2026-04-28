@@ -32,7 +32,6 @@ import {
   useAgentRunning,
   useAllInstancesRewardStatus,
   useBalanceAndRefillRequirementsContext,
-  useIsInitiallyFunded,
   useMasterWalletContext,
   usePageState,
   useServices,
@@ -51,6 +50,8 @@ import { UpdateAvailableModal } from '../UpdateAvailableAlert/UpdateAvailableMod
 import { AgentTreeMenu } from './AgentTreeMenu';
 import { ArchiveAgentModal } from './ArchiveAgentModal';
 import { AutoRunControl } from './AutoRunControl';
+import { BackupWalletAlert } from './BackupWalletAlert';
+import { useAutoOpenUpdateModal } from './hooks/useAutoOpenUpdateModal';
 import { useListFade } from './hooks/useListFade';
 import { SidebarAgentGroup } from './types';
 
@@ -147,10 +148,15 @@ export const Sidebar = () => {
     isLoading,
     selectedServiceConfigId,
     updateSelectedServiceConfigId,
-    getAgentTypeFromService,
   } = useServices();
   const { isLoading: isMasterWalletLoading } = useMasterWalletContext();
   const { fade, ref: scrollAreaRef } = useListFade();
+
+  const {
+    isOpen: isUpdateModalOpen,
+    open: openUpdateModal,
+    close: closeUpdateModal,
+  } = useAutoOpenUpdateModal();
 
   const {
     pendingArchiveInstanceId,
@@ -246,30 +252,12 @@ export const Sidebar = () => {
     updateSelectedServiceConfigId,
   ]);
 
-  const { isInstanceInitiallyFunded } = useIsInitiallyFunded();
-
   const handleInstanceSelect = useCallback(
     (serviceConfigId: string) => {
       updateSelectedServiceConfigId(serviceConfigId);
-
-      const agentType = getAgentTypeFromService(serviceConfigId);
-      if (
-        !agentType ||
-        !isInstanceInitiallyFunded(serviceConfigId, agentType)
-      ) {
-        gotoPage(PAGES.Setup);
-        gotoSetup(SETUP_SCREEN.FundYourAgent);
-      } else {
-        gotoPage(PAGES.Main);
-      }
+      gotoPage(PAGES.Main);
     },
-    [
-      updateSelectedServiceConfigId,
-      gotoPage,
-      gotoSetup,
-      getAgentTypeFromService,
-      isInstanceInitiallyFunded,
-    ],
+    [updateSelectedServiceConfigId, gotoPage],
   );
 
   const handleBottomMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(
@@ -348,8 +336,12 @@ export const Sidebar = () => {
 
           <div className="p-16">
             <BackupSeedPhraseAlert />
-            <UpdateAvailableAlert />
-            <UpdateAvailableModal />
+            <BackupWalletAlert />
+            <UpdateAvailableAlert onOpen={openUpdateModal} />
+            <UpdateAvailableModal
+              isOpen={isUpdateModalOpen}
+              onClose={closeUpdateModal}
+            />
 
             <Menu
               selectedKeys={selectedBottomMenuKey}

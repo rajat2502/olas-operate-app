@@ -11,14 +11,14 @@ import { X402_ENABLED_FLAGS } from '../../x402';
 import { KPI_DESC_PREFIX } from '../constants';
 
 export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
-  hash: 'bafybeiawwee4k5sga223bwh7wsu5dnzubam2dtked6lioe7roegkxbouzm',
-  service_version: 'v0.33.2-rc1',
+  hash: 'bafybeiba4pkryaopr7cerlholkkjqlyiiyqvwttujdzqcj63wrqw3t2esq',
+  service_version: 'v0.33.5-rc2',
   agent_release: {
     is_aea: true,
     repository: {
       owner: 'valory-xyz',
       name: 'trader',
-      version: 'v0.33.2-rc1',
+      version: 'v0.33.5-rc2',
     },
   },
   agentType: AgentMap.PredictTrader,
@@ -125,7 +125,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
       name: 'Irrelevant tools',
       description: '',
       value:
-        '["native-transfer","prediction-online-lite","claude-prediction-online-lite","prediction-online-sme-lite","prediction-request-reasoning-lite","prediction-request-reasoning-claude-lite","prediction-offline-sme","deepmind-optimization","deepmind-optimization-strong","openai-gpt-3.5-turbo","openai-gpt-3.5-turbo-instruct","openai-gpt-4","openai-text-davinci-002","openai-text-davinci-003","prediction-online-sum-url-content","prediction-online-summarized-info","stabilityai-stable-diffusion-512-v2-1","stabilityai-stable-diffusion-768-v2-1","stabilityai-stable-diffusion-v1-5","stabilityai-stable-diffusion-xl-beta-v2-2-2","prediction-url-cot-claude","prediction-url-cot","resolve-market-reasoning-gpt-4.1","resolve-market-jury-v1","gemini-2.5-flash","anthropic-claude-opus-4-5-latest","echo","profit_pulse","claude-prediction-online","prediction-request-rag-claude","prediction-online-sme","prediction_request_reasoning-claude","prediction_request_reasoning-5.2.mini","prediction_request_reasoning","prediction-request-rag","prediction-online"]',
+        '["native-transfer","prediction-online-lite","claude-prediction-online-lite","prediction-online-sme-lite","prediction-request-reasoning-lite","prediction-request-reasoning-claude-lite","prediction-offline-sme","deepmind-optimization","deepmind-optimization-strong","openai-gpt-3.5-turbo","openai-gpt-3.5-turbo-instruct","openai-gpt-4","openai-gpt-4o-2024-08-06","openai-text-davinci-002","openai-text-davinci-003","prediction-online-sum-url-content","prediction-online-summarized-info","stabilityai-stable-diffusion-512-v2-1","stabilityai-stable-diffusion-768-v2-1","stabilityai-stable-diffusion-v1-5","stabilityai-stable-diffusion-xl-beta-v2-2-2","prediction-url-cot-claude","prediction-url-cot","resolve-market-reasoning-gpt-4.1","resolve-market-jury-v1","gemini-2.5-flash","anthropic-claude-opus-4-5-latest","echo","profit_pulse","claude-prediction-online","claude-prediction-offline","prediction-request-rag-claude","prediction-online-sme","prediction_request_reasoning-claude","prediction_request_reasoning-5.2.mini","prediction_request_reasoning","prediction-request-reasoning","prediction-request-rag","prediction-online","nephyr_risk_mech","nephyr_weather_mech","nephyr_wallets_mech","nephyr_backtest_mech"]',
       provision_type: EnvProvisionType.FIXED,
     },
     GENAI_API_KEY: {
@@ -151,14 +151,14 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
 } as const;
 
 export const PREDICT_POLYMARKET_SERVICE_TEMPLATE: ServiceTemplate = {
-  hash: 'bafybeidkmrad4mbjiiu42alsvdxhas6lehjh7gd6vers5ltcvuybolefpa',
-  service_version: 'v0.33.3',
+  hash: 'bafybeichhdcb76gqtjw3kucrnxvc5cwrj7xyn6dthqphaqgzk4x54b66sm',
+  service_version: 'v0.34.0-rc1',
   agent_release: {
     is_aea: true,
     repository: {
       owner: 'valory-xyz',
       name: 'trader',
-      version: 'v0.33.3',
+      version: 'v0.34.0-rc1',
     },
   },
   agentType: AgentMap.Polystrat,
@@ -272,7 +272,7 @@ export const PREDICT_POLYMARKET_SERVICE_TEMPLATE: ServiceTemplate = {
       name: 'Irrelevant tools',
       description: '',
       value:
-        '["native-transfer","prediction-online-lite","claude-prediction-online-lite","prediction-online-sme-lite","prediction-request-reasoning-lite","prediction-request-reasoning-claude-lite","prediction-offline-sme","deepmind-optimization","deepmind-optimization-strong","openai-gpt-3.5-turbo","openai-gpt-3.5-turbo-instruct","openai-gpt-4","openai-text-davinci-002","openai-text-davinci-003","prediction-online-sum-url-content","prediction-online-summarized-info","stabilityai-stable-diffusion-512-v2-1","stabilityai-stable-diffusion-768-v2-1","stabilityai-stable-diffusion-v1-5","stabilityai-stable-diffusion-xl-beta-v2-2-2","prediction-url-cot-claude","prediction-url-cot","resolve-market-reasoning-gpt-4.1","resolve-market-jury-v1","echo","profit_pulse","prediction_request_reasoning-claude","prediction_request_reasoning-5.2.mini","prediction_request_reasoning","prediction-online-sme","claude-prediction-online","prediction-request-rag","prediction-offline","claude-prediction-offline","prediction-request-rag-claude","prediction-online","prediction-request-reasoning-claude"]',
+        '["native-transfer","prediction-online-lite","claude-prediction-online-lite","prediction-online-sme-lite","prediction-request-reasoning-lite","prediction-request-reasoning-claude-lite","prediction-offline-sme","deepmind-optimization","deepmind-optimization-strong","openai-gpt-3.5-turbo","openai-gpt-3.5-turbo-instruct","openai-gpt-4","openai-text-davinci-002","openai-text-davinci-003","prediction-online-sum-url-content","prediction-online-summarized-info","stabilityai-stable-diffusion-512-v2-1","stabilityai-stable-diffusion-768-v2-1","stabilityai-stable-diffusion-v1-5","stabilityai-stable-diffusion-xl-beta-v2-2-2","prediction-url-cot-claude","prediction-url-cot","resolve-market-reasoning-gpt-4.1","resolve-market-jury-v1","echo","profit_pulse","prediction_request_reasoning-claude","prediction_request_reasoning-5.2.mini","prediction_request_reasoning","prediction-online-sme","claude-prediction-online","prediction-request-rag","prediction-offline","claude-prediction-offline","prediction-request-rag-claude","prediction-online","prediction-request-reasoning-claude","prediction-request-reasoning"]',
       provision_type: EnvProvisionType.FIXED,
     },
     GENAI_API_KEY: {

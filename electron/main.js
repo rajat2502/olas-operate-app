@@ -66,6 +66,7 @@ const { isPortAvailable, findAvailablePort } = require('./ports');
 const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { PearlTray } = require('./components/PearlTray');
+const { registerAutoUpdaterHandlers } = require('./autoUpdater');
 
 const { pki } = require('node-forge');
 
@@ -250,6 +251,7 @@ async function stopBackend() {
 }
 
 async function beforeQuit(event) {
+  logger.electron(`[OTA] beforeQuit called (appRealClose=${appRealClose}, isBeforeQuitting=${isBeforeQuitting})`);
   if (typeof event.preventDefault === 'function' && !appRealClose) {
     event.preventDefault();
     logger.electron('onquit event.preventDefault');
@@ -262,6 +264,7 @@ async function beforeQuit(event) {
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
+  logger.electron('[OTA] Windows destroyed');
 
   logger.electron('Stop backend gracefully:');
   await stopBackend();
@@ -483,13 +486,14 @@ const createMainWindow = async () => {
   });
 
   mainWindow.on('close', function (event) {
+    if (appRealClose) return; // Allow close during OTA update or real quit
     event.preventDefault();
     mainWindow.hide();
   });
 
   try {
     logger.electron('Setting up store IPC');
-    setupStoreIpc(ipcMain, mainWindow);
+    setupStoreIpc(ipcMain);
   } catch (e) {
     logger.electron(`Store IPC failed: ${stringifyJson(e)}`);
   }
@@ -913,6 +917,15 @@ process.on('uncaughtException', (error) => {
 // OPEN PATH
 ipcMain.on('open-path', (_, filePath) => {
   shell.openPath(filePath);
+});
+
+registerAutoUpdaterHandlers({
+  getMainWindow: () => mainWindow,
+  setAppRealClose: (value) => {
+    appRealClose = value;
+  },
+  getOperateDaemonPid: () => operateDaemonPid,
+  killProcesses,
 });
 
 /**

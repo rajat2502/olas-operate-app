@@ -54,8 +54,6 @@ export const createStakingRewardsQuery = ({
         stakingProgramId: stakingProgramId!,
         multisig: multisig! as Address,
         agentConfig,
-        onError: (error) =>
-          console.error('Error getting staking rewards info', error),
       });
     },
     enabled:
@@ -68,6 +66,7 @@ export const createStakingRewardsQuery = ({
       ? (refetchInterval ?? FIVE_SECONDS_INTERVAL)
       : false) as number | false,
     refetchOnWindowFocus: false,
+    refetchIntervalInBackground: true,
   };
 };
 
