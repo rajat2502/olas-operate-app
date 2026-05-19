@@ -1,7 +1,7 @@
 name: Release for linux
 
 permissions:
-  contents: write
+  contents: read
 
 # Triggered only via workflow_call
 on:
@@ -15,23 +15,30 @@ on:
 jobs:
   # PyInstaller job for both x64 and arm64 binaries
   build-pyinstaller:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os_arch: x64
+            runner: ubuntu-latest
+          - os_arch: arm64
+            runner: ubuntu-22.04-arm  # to support older GLIBC_2.36 on Raspberry Pi OS
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       # Set up Python with setup-python action and add it to PATH
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         id: setup-python
         with:
           python-version: "3.14"
 
       # Install Poetry and its dependencies
       - name: Install and configure Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a # v1.4.1
         with:
           version: "2.3.2"
           virtualenvs-create: true
@@ -42,11 +49,11 @@ jobs:
       # Set OS_ARCH env
       - name: Set architecture environment variable
         run: |
-          echo "OS_ARCH=x64" >> $GITHUB_ENV; 
+          echo "OS_ARCH=${{ matrix.os_arch }}" >> $GITHUB_ENV
 
       # Cache Poetry dependencies with unique key for each environment and architecture
       - name: Cache Poetry dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cache/pypoetry
@@ -64,7 +71,7 @@ jobs:
           poetry run pyinstaller operate/tendermint.py --onefile
           cp dist/tendermint dist/tendermint_bin
 
-          poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --onedir --name pearl_${{ env.OS_ARCH }}
+          poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos operate/pearl.py --onedir --name pearl_${{ env.OS_ARCH }}
 
       # Package middleware with tar to preserve signatures and extended attributes
       - name: Package middleware with tar
@@ -74,33 +81,40 @@ jobs:
           cd ..
 
       - name: Upload middleware artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: middleware_linux_${{ env.OS_ARCH }}
           path: dist/pearl_${{ env.OS_ARCH }}.tar.gz
 
       - name: Upload Tendermint artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: tendermint_linux_${{ env.OS_ARCH }}
           path: dist/tendermint_bin
-      
 
   # Jobs for production, running separately for x64 and arm64
   build-release:
     needs: [build-pyinstaller]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       matrix:
-        env: [production]
+        include:
+          - os_arch: x64
+            env: production
+            runner: ubuntu-latest
+          - os_arch: arm64
+            env: production
+            runner: ubuntu-22.04-arm
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         id: setup-python
         with:
           python-version: "3.14"
@@ -108,57 +122,64 @@ jobs:
       - name: Add Python to PATH
         run: |
           echo "${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_PATH
-      
-      - uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22.18"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Activate pinned Yarn via Corepack
+        run: |
+          corepack enable
+          # Read the full integrity-verified spec from package.json so corepack
+          # checks the sha512 hash. Plain `corepack prepare yarn@1.22.22 --activate`
+          # downloads from npm without verifying against the hash.
+          PM_SPEC=$(node -p "require('./package.json').packageManager")
+          corepack prepare "$PM_SPEC" --activate
+
+      - name: Verify Yarn version
+        run: |
+          yarn --version
+          test "$(yarn --version)" = "1.22.22" || (echo "::error::Yarn version mismatch" && exit 1)
+
       # Configure Yarn network settings for timeout, retries, and reduced concurrency
       - name: Configure Yarn network settings
         run: |
-              yarn config set network-timeout 60000         # Set network timeout to 1 minute
-              yarn config set network-retries 10             # Retry up to 10 times
-              yarn config set network-concurrency 2          # Reduce concurrency to 2 connections
-    
+          yarn config set network-timeout 60000         # Set network timeout to 1 minute
+          yarn config set network-retries 10             # Retry up to 10 times
+          yarn config set network-concurrency 2          # Reduce concurrency to 2 connections
+
       # Set OS_ARCH env
       - name: Set architecture environment variable
         run: |
-          echo "OS_ARCH=x64" >> $GITHUB_ENV; 
+          echo "OS_ARCH=${{ matrix.os_arch }}" >> $GITHUB_ENV
       # Download the appropriate architecture artifact (tar.gz)
       - name: Download middleware binary for architecture
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: middleware_linux_${{ env.OS_ARCH }}
           path: .
-      
+
       # Extract middleware from tar (preserves signatures and extended attributes)
       - name: Extract middleware from tar
         run: |
           tar -xzf pearl_${{ env.OS_ARCH }}.tar.gz
           mkdir -p electron/bins
           mv pearl_${{ env.OS_ARCH }} electron/bins/middleware
-      
-      - name: Download tendermint binary for architecture
-        uses: actions/download-artifact@v4
-        with:
-          name: tendermint_linux_${{ env.OS_ARCH }}
-          path: electron/bins/
-      
-      # Configure Yarn network settings for timeout, retries, and reduced concurrency
-      - name: Configure Yarn network settings
-        run: |
-            ls electron/bins/
 
       # Set Tendermint download URL based on architecture
       - name: Set Tendermint download URL
         run: |
-          echo "TM_DOWNLOAD_URL=https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_amd64.tar.gz" >> $GITHUB_ENV
+          if [ "${{ env.OS_ARCH }}" = "x64" ]; then
+            echo "TM_DOWNLOAD_URL=https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_amd64.tar.gz" >> $GITHUB_ENV
+          else
+            echo "TM_DOWNLOAD_URL=https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_arm64.tar.gz" >> $GITHUB_ENV
+          fi
 
       # Cache Tendermint binary
       - name: Cache Tendermint binary
         id: cache-tendermint
-        uses: actions/cache@v3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: tendermint_binary/
           key: tendermint-v0.34.19-${{ runner.os }}-${{ env.OS_ARCH }}
@@ -178,9 +199,14 @@ jobs:
         run: |
           cp tendermint_binary/tendermint electron/bins/tendermint
           chmod +x electron/bins/tendermint
-      
-      
-          # Copy tendermint binaries into middleware directory
+
+      - name: Download tendermint binary for architecture
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: tendermint_linux_${{ env.OS_ARCH }}
+          path: electron/bins/
+
+      # Copy tendermint binaries into middleware directory
       - name: Copy tendermint binaries to middleware
         run: |
           cp electron/bins/tendermint electron/bins/middleware/tendermint
@@ -188,17 +214,18 @@ jobs:
           chmod +x electron/bins/middleware/tendermint
           chmod +x electron/bins/middleware/tendermint_bin
 
-
       # Add execution permissions to the binaries
       - name: Add exec permissions
         run: |
           chmod +x electron/bins/tendermint
           chmod +x electron/bins/middleware/pearl_*
+          chmod +x electron/bins/middleware/tendermint
+          chmod +x electron/bins/middleware/tendermint_bin
 
       # Cache electron-builder downloads
       - name: Restore electron-builder cache
         id: cache-electron-builder
-        uses: actions/cache@v3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/electron-builder
           key: electron-builder-cache-${{ runner.os }}-${{ env.OS_ARCH }}-${{ matrix.env }}-${{ hashFiles('yarn.lock') }}
@@ -206,7 +233,7 @@ jobs:
       # Cache electron node_modules with unique key for each environment and architecture
       - name: Restore electron node_modules cache
         id: cache-electron-node-modules
-        uses: actions/cache@v3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: node_modules
           key: electron-node-modules-v2-${{ runner.os }}-${{ env.OS_ARCH }}-${{ matrix.env }}-${{ hashFiles('yarn.lock', '.github/workflows/release_linux.yml') }}
@@ -234,7 +261,7 @@ jobs:
       # Cache frontend node_modules with unique key for each environment and architecture
       - name: Restore frontend node_modules cache
         id: cache-frontend-node-modules
-        uses: actions/cache@v3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: frontend/node_modules
           key: frontend-node-modules-${{ runner.os }}-${{ env.OS_ARCH }}-${{ matrix.env }}-${{ hashFiles('frontend/yarn.lock') }}
@@ -248,7 +275,7 @@ jobs:
       - name: Build frontend for production
         run: yarn build:frontend
         env:
-          NODE_ENV: ${{ matrix.env }}          
+          NODE_ENV: ${{ matrix.env }}
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
           OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
           BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/

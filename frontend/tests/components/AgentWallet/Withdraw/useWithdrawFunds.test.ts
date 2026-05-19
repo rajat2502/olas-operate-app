@@ -5,7 +5,10 @@ import { act, createElement, PropsWithChildren } from 'react';
 import { useWithdrawFunds } from '../../../../components/AgentWallet/Withdraw/useWithdrawFunds';
 import { useServices } from '../../../../hooks';
 import { ServicesService } from '../../../../service/Services';
-import { DEFAULT_SERVICE_CONFIG_ID } from '../../../helpers/factories';
+import {
+  DEFAULT_SERVICE_CONFIG_ID,
+  makeInsufficientGasError,
+} from '../../../helpers/factories';
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 jest.mock(
@@ -13,7 +16,7 @@ jest.mock(
   () => require('../../../mocks/ethersMulticall').ethersMulticallMock,
 );
 /* eslint-enable @typescript-eslint/no-var-requires */
-jest.mock('../../../../constants/providers', () => ({}));
+jest.mock('../../../../constants/providers', () => ({ PROVIDERS: {} }));
 
 jest.mock('../../../../hooks', () => ({
   useServices: jest.fn(),
@@ -89,6 +92,25 @@ describe('useWithdrawFunds (AgentWallet)', () => {
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
+    consoleSpy.mockRestore();
+  });
+
+  it('surfaces the structured error body when the service rejects with INSUFFICIENT_SIGNER_GAS', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+    const errorBody = makeInsufficientGasError();
+    mockWithdrawBalance.mockRejectedValue(errorBody);
+
+    const { result } = renderHook(() => useWithdrawFunds(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.onWithdrawFunds();
+    });
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+    expect(result.current.error).toEqual(errorBody);
     consoleSpy.mockRestore();
   });
 

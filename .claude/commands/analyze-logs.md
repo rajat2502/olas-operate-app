@@ -19,6 +19,8 @@ Check whether `$ARGUMENTS` ends in `.zip` or whether the user has attached / men
 
 4. **If no zip is involved**, skip this step entirely.
 
+> **Optional helper:** `scripts/extract-context.sh` can pull structured context (services, master wallet, log summary, os info, on-chain balances, tx history) directly from the zip without extracting it. Run `scripts/extract-context.sh --help` for the full reference.
+
 ---
 
 ## Invocation Scenarios
@@ -49,7 +51,7 @@ Pearl is an Electron + Next.js + Python backend desktop app. Logs come from:
 | `debug_data.json` | Service config snapshot | JSON |
 | `os_info.txt` | System info | Plain text |
 
-**AutoRun log prefix**: `autorun:` (single colon, appears in electron.log)
+**AutoRun log prefix**: emitted as `autorun::` (double colon) in `electron.log`. The source constant `AUTO_RUN_LOG_PREFIX` is `autorun:` and the event formatter in `useLogAutoRunEvent.ts` appends another `: ` before the message, so every line in the log reads `autorun:: <message>`. Grep for `autorun::` to be precise; `autorun:` also matches (substring) but is noisier.
 
 **File paths in logs** are masked with asterisks for privacy: `/Users/*******/.operate/...`
 
@@ -106,12 +108,12 @@ For each log file present in the directory, read the relevant portion and extrac
 
 Look for these event categories and note their timestamps:
 - **App lifecycle**: startup, shutdown, backend connection lost/restored
-- **AutoRun state changes**: `autorun: enabled`, `autorun: disabled`, `autorun: rotation triggered`, `autorun: rotate_begin`
-- **Start/stop events**: `autorun: starting`, `autorun: started`, `autorun: stopping`, `autorun: stopped`
-- **Start results**: `autorun: started` (deployed), `autorun: agent_blocked` (balance/eviction/deterministic), `autorun: infra_failed` (transient, queue does NOT advance), `autorun: aborted` (disabled or sleep)
-- **Failures**: `autorun: start error`, `autorun: stop failed`, `autorun: infra_failed`, `autorun: rewards eligibility timeout`
-- **Stale data**: `autorun: balances stale`, `autorun: triggering refetch`
-- **Watchdog / rotation**: `autorun: rotate_begin` every ~4200s with a single configured agent is **expected behaviour** — watchdog fires, stays on same agent, not a bug
+- **AutoRun state changes**: `autorun:: enabled`, `autorun:: disabled`, `autorun:: rotation triggered`, `autorun:: rotate_begin`
+- **Start/stop events**: `autorun:: starting`, `autorun:: started`, `autorun:: stopping`, `autorun:: stopped`
+- **Start results**: `autorun:: started` (deployed), `autorun:: agent_blocked` (balance/eviction/deterministic), `autorun:: infra_failed` (transient, queue does NOT advance), `autorun:: aborted` (disabled or sleep)
+- **Failures**: `autorun:: start error`, `autorun:: stop failed`, `autorun:: infra_failed`, `autorun:: rewards eligibility timeout`
+- **Stale data**: `autorun:: balances stale`, `autorun:: triggering refetch`
+- **Watchdog / rotation**: `autorun:: rotate_begin` every ~4200s with a single configured agent is **expected behaviour** — watchdog fires, stays on same agent, not a bug
 - **Sleep/wake**: any sleep-detection messages (elapsed > expected + 30s triggers bail-out and safety-net reschedule)
 - **Epoch stuck (persistent)**: `epoch expired, stale isEligibleForRewards=true overridden to false` repeating every 2 minutes for hours/days. This means the on-chain `tsCheckpoint` is not advancing despite the agent running. Cross-reference with `sc-{uuid}_agent.log` to check if `ts_checkpoint` reads return the same value across all checkpoint calls — if so, the checkpoint is a silent no-op (see Step 3f).
 - **Backend errors**: `ECONNREFUSED`, `Failed to fetch`, `Backend not running`
@@ -228,6 +230,15 @@ Group by session (app start → app stop).
 
 ## Step 5 — Root Cause Analysis
 
+**Attribution order — follow this layer sequence, stop at the first match:**
+
+1. **On-chain** — contract state, staking pool balance, checkpoint values, tx receipts. Anything that would make the agent's requests succeed but produce no effect (rewards pool empty, staking slot taken).
+2. **Agent** — per-service `sc-{uuid}_agent.log`. Runtime crashes, skill errors, transaction simulation failures, RPC errors from the agent's side.
+3. **Backend (middleware)** — `cli*.log`. HTTP 5xx, `NoneType` / `AttributeError` in `funding_manager`, service lifecycle failures, staking-reference issues.
+4. **Frontend** — `next.log` and UI state. Only look here after the three layers above are ruled out.
+
+Don't over-attribute stale UI data to frontend code. A "greyed out Start button" is usually a **backend** `funding_requirements=500` or an **on-chain** eviction — not a frontend bug. Only conclude "frontend bug" when the backend responses are clean, the on-chain state is healthy, and the UI still misrepresents the data (e.g. the OPE-1557 staking oscillation case, where all three lower layers were fine but frontend error-handling corrupted the rendered state).
+
 Based on the timeline and error patterns, identify:
 
 1. **What failed** — the specific operation or component that broke
@@ -302,17 +313,18 @@ Use this section to quickly match symptoms to root causes before diving into the
 | `current_staking_program=None` warning in cli logs | **EXPECTED** — service hash or staking program was recently updated; old reference intentionally cleared. NOT a bug. | `cli*.log` — only investigate further if `debug_data.json` `hash_history` shows NO recent update |
 | Polystrat crashes with `HTTP Client/Server has shutdown` | `position.get("conditionId")` type error after polymarket API timeout | `sc-{uuid}_agent.log` for `conditionId` / `polymarket_reedem.py` |
 | Polystrat running but not trading | Geo-block from Polymarket | `sc-{uuid}_agent.log` for `Trading restricted in your region` |
-| AutoRun watchdog fires every ~70min, same agent restarts | Only one agent configured — expected watchdog rotation | `electron.log` for `autorun: rotate_begin` with no queue advancement |
+| AutoRun watchdog fires every ~70min, same agent restarts | Only one agent configured — expected watchdog rotation | `electron.log` for `autorun:: rotate_begin` with no queue advancement |
 | Agent not starting, AutoRun shows `agent_blocked` | Low balance, eviction, or staking slot unavailable | `cli*.log` `allow_start_agent`, `isAgentEvicted` signals |
 | Agent not starting, AutoRun shows `infra_failed` | Transient network/timeout — queue does not advance | `cli*.log` for timeouts or connection errors around the same timestamp |
 | Epoch clock shows 00:00:00 (frozen countdown) | Staking contract rewards pool is 0 → checkpoint no-op → `tsCheckpoint` never advances | `electron.log` for persistent `epoch expired` messages; `sc-{uuid}_agent.log` for identical `ts_checkpoint` values across reads |
 | Agent stuck in `call_checkpoint_round` loop at period 0 | Rewards pool empty — checkpoint returns early, `tsCheckpoint` unchanged despite `ExecutionSuccess` on Safe | `sc-{uuid}_agent.log`: grep `Calling method ts_checkpoint` — same `body={'data': N}` on every read |
 | Agent gas depleted after checkpoint loop | Secondary effect of stuck checkpoint: tight loop burns gas on useless txs; agent then fails USDC swap or next checkpoint | `sc-{uuid}_agent.log` for `insufficient funds for gas * price + value` after repeated `CHECKPOINT_TX_EXECUTED` |
 | CORS errors on `funding_requirements` / backend API + 500 | Agent requesting incorrect address (not a frontend CORS config issue). Fix is in agent code, not Pearl CORS headers | Browser console for `Access-Control-Allow-Origin` errors paired with `net::ERR_FAILED 500`; the 500 causes missing CORS headers on the error response |
+| Staking section oscillates between "earned rewards / standby", "Fetching mech's information", "All slots taken" every ~minute | Transient Gnosis RPC failures combined with three frontend bugs: (1) `fetchAgentStakingRewardsInfo` silently returning `null` instead of throwing — React Query couldn't preserve stale data; (2) `StakingContractDetailsProvider` using `Promise.allSettled` and merging empty objects on partial failure; (3) operator-precedence bug `availableRewards ?? 0 > 0`. Fixed in PR #1847 (OPE-1557) — if oscillation reappears, audit those three sites first. | `next.log` for frequent `Failed to fetch` entries; agent logs healthy; on-chain state unchanged. Not an AutoRun / backend / agent bug — purely frontend error-handling. |
 
 ### Frontend "Start" Button Greyed Out — Triage Order
 
-1. Check `useIsInitiallyFunded` — is it reading from the Electron store or hardcoded?
+1. Check `useIsInitiallyFunded` — confirm it reads from the backend-hydrated `storeState` (via `StoreProvider`'s `StoreService.getStore()` call against `/store`), not a hardcoded literal. Expected shape: `storeState?.[selectedAgentType]?.isInitialFunded`. If `storeState` is `undefined`, hydration hasn't completed or failed — check `pearl_store:` prefix entries in `next.log` for hydration errors.
 2. Check `GET /api/v2/service/{id}/funding_requirements` — is it returning 500?
 3. Check `allow_start_agent` in backend response — is balance actually insufficient?
 4. Check `isAgentEvicted` and staking slot availability in backend logs.

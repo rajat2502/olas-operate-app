@@ -21,7 +21,7 @@ jest.mock(
   () => require('../../mocks/ethersMulticall').ethersMulticallMock,
 );
 /* eslint-enable @typescript-eslint/no-var-requires */
-jest.mock('../../../constants/providers', () => ({}));
+jest.mock('../../../constants/providers', () => ({ PROVIDERS: {} }));
 
 jest.mock('../../../hooks', () => ({
   useServices: jest.fn(),
@@ -40,7 +40,7 @@ const mockUseAvailableAgentAssets = useAvailableAgentAssets as jest.Mock;
 const mockUsePageState = usePageState as jest.Mock;
 
 const createWrapper = (navParams: Record<string, unknown> = {}) => {
-  mockUsePageState.mockReturnValue({ navParams });
+  mockUsePageState.mockReturnValue({ navParams, clearNavParams: jest.fn() });
   mockUseServices.mockReturnValue({
     isLoading: false,
     selectedAgentConfig: { evmHomeChainId: 100 },

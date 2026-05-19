@@ -14,6 +14,7 @@ import {
   AgentMap,
   AgentType,
   COLOR,
+  POLYMARKET_DEPOSIT_WALLET_MIGRATION_URL,
   UNICODE_SYMBOLS,
   X_DEVELOPER_CONSOLE_URL,
 } from '@/constants';
@@ -35,6 +36,47 @@ const UnderConstructionAlert = () => (
           The agent is unavailable due to technical issues for an unspecified
           time.
         </Text>
+      </Flex>
+    }
+  />
+);
+
+const MaintenanceAlert = ({
+  agentName,
+  reason,
+  url,
+}: {
+  agentName: string;
+  reason?: string;
+  url?: string;
+}) => (
+  <Alert
+    type="warning"
+    fullWidth={false}
+    showIcon
+    className="rounded-12"
+    message={
+      <Flex gap={url ? 8 : 4} vertical>
+        <Text className="text-sm font-weight-500">
+          {agentName} is currently unavailable
+        </Text>
+        <Text className="text-sm">
+          New {agentName} agents cannot be created at this time
+          {reason && ` ${reason}`}. Existing agents continue to run as usual.
+        </Text>
+        {url && (
+          <Link
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary text-sm"
+          >
+            See more here
+            <span className="text-xxs ml-4">
+              {UNICODE_SYMBOLS.EXTERNAL_LINK}
+            </span>
+          </Link>
+        )}
       </Flex>
     }
   />
@@ -206,8 +248,27 @@ export const FundingRequirementStep = ({
     middlewareHomeChainId,
     category,
     isUnderConstruction,
+    isAddingNewBlocked,
   } = AGENT_CONFIG[agentType];
   const { name, displayName } = asEvmChainDetails(middlewareHomeChainId);
+
+  const blockingAlert = isUnderConstruction ? (
+    <UnderConstructionAlert />
+  ) : isAddingNewBlocked ? (
+    <MaintenanceAlert
+      agentName={agentName}
+      reason={
+        agentType === AgentMap.Polystrat
+          ? 'due to recent Polymarket protocol updates'
+          : undefined
+      }
+      url={
+        agentType === AgentMap.Polystrat
+          ? POLYMARKET_DEPOSIT_WALLET_MIGRATION_URL
+          : undefined
+      }
+    />
+  ) : null;
 
   return (
     <IntroductionAnimatedContainer>
@@ -218,10 +279,8 @@ export const FundingRequirementStep = ({
           category={category}
           desc={desc}
         />
-        {isUnderConstruction ? (
-          <div style={{ marginBottom: 300 }}>
-            <UnderConstructionAlert />
-          </div>
+        {blockingAlert ? (
+          <div style={{ marginBottom: 300 }}>{blockingAlert}</div>
         ) : (
           <>
             <OperatingChain chainName={name} chainDisplayName={displayName} />

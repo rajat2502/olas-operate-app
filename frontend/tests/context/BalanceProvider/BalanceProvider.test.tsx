@@ -13,6 +13,7 @@ import {
 } from '../../../context/BalanceProvider/BalanceProvider';
 import { MasterWalletContext } from '../../../context/MasterWalletProvider';
 import { OnlineStatusContext } from '../../../context/OnlineStatusProvider';
+import { PageStateContext } from '../../../context/PageStateProvider';
 import { ServicesContext } from '../../../context/ServicesProvider';
 import { AgentConfig } from '../../../types/Agent';
 import {
@@ -28,6 +29,7 @@ import {
   makeMasterSafe,
   makeService,
   MOCK_MULTISIG_ADDRESS,
+  MOCK_SERVICE_CONFIG_ID_3,
   SECOND_SAFE_ADDRESS,
 } from '../../helpers/factories';
 import { createTestQueryClient } from '../../helpers/queryClient';
@@ -37,7 +39,7 @@ jest.mock(
   'ethers-multicall',
   () => require('../../mocks/ethersMulticall').ethersMulticallMock,
 );
-jest.mock('../../../constants/providers', () => ({}));
+jest.mock('../../../constants/providers', () => ({ PROVIDERS: {} }));
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 const mockGetCrossChainBalances = jest.fn();
@@ -70,7 +72,7 @@ const makeWalletBalance = (
 const makeStakedBalance = (
   overrides: Partial<CrossChainStakedBalances[number]> = {},
 ): CrossChainStakedBalances[number] => ({
-  serviceId: DEFAULT_SERVICE_CONFIG_ID,
+  serviceConfigId: DEFAULT_SERVICE_CONFIG_ID,
   evmChainId: EvmChainIdMap.Gnosis,
   olasBondBalance: 10,
   olasDepositBalance: 20,
@@ -80,13 +82,18 @@ const makeStakedBalance = (
 
 type WrapperOptions = {
   isOnline?: boolean;
+  isUserLoggedIn?: boolean;
   masterWallets?: MasterWallet[] | null;
   services?: MiddlewareServiceResponse[] | null;
   selectedAgentConfig?: AgentConfig;
 };
 
 const createWrapper = (options: WrapperOptions = {}) => {
-  const { isOnline = true, selectedAgentConfig = defaultAgentConfig } = options;
+  const {
+    isOnline = true,
+    isUserLoggedIn = true,
+    selectedAgentConfig = defaultAgentConfig,
+  } = options;
   const masterWallets =
     options.masterWallets === null
       ? undefined
@@ -102,35 +109,47 @@ const createWrapper = (options: WrapperOptions = {}) => {
   return ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={queryClient}>
       <OnlineStatusContext.Provider value={{ isOnline }}>
-        <MasterWalletContext.Provider value={{ masterWallets }}>
-          <ServicesContext.Provider
-            value={{
-              services,
-              selectedAgentConfig,
-              serviceWallets: undefined as AgentWallet[] | undefined,
-              availableServiceConfigIds: [],
-              getServiceConfigIdsOf: () => [],
-              getAgentTypeFromService: () => null,
-              getServiceConfigIdFromAgentType: () => null,
-              getInstancesOfAgentType: () => [],
-              isSelectedServiceDeploymentStatusLoading: false,
-              selectedAgentType: AgentMap.PredictTrader,
-              selectedAgentName: null,
-              selectedAgentNameOrFallback: 'My agent',
-              selectedServiceConfigId: null,
-              deploymentDetails: undefined,
-              updateAgentType: jest.fn(),
-              selectAgentTypeForSetup: jest.fn(),
-              updateSelectedServiceConfigId: jest.fn(),
-              overrideSelectedServiceStatus: jest.fn(),
-              paused: false,
-              setPaused: jest.fn(),
-              togglePaused: jest.fn(),
-            }}
-          >
-            <BalanceProvider>{children}</BalanceProvider>
-          </ServicesContext.Provider>
-        </MasterWalletContext.Provider>
+        <PageStateContext.Provider
+          value={
+            {
+              isUserLoggedIn,
+              pageState: 0,
+              setPageState: jest.fn(),
+              setNavParams: jest.fn(),
+              setIsUserLoggedIn: jest.fn(),
+            } as unknown as React.ContextType<typeof PageStateContext>
+          }
+        >
+          <MasterWalletContext.Provider value={{ masterWallets }}>
+            <ServicesContext.Provider
+              value={{
+                services,
+                selectedAgentConfig,
+                serviceWallets: undefined as AgentWallet[] | undefined,
+                availableServiceConfigIds: [],
+                getServiceConfigIdsOf: () => [],
+                getAgentTypeFromService: () => null,
+                getServiceConfigIdFromAgentType: () => null,
+                getInstancesOfAgentType: () => [],
+                isSelectedServiceDeploymentStatusLoading: false,
+                selectedAgentType: AgentMap.PredictTrader,
+                selectedAgentName: null,
+                selectedAgentNameOrFallback: 'My agent',
+                selectedServiceConfigId: null,
+                deploymentDetails: undefined,
+                updateAgentType: jest.fn(),
+                selectAgentTypeForSetup: jest.fn(),
+                updateSelectedServiceConfigId: jest.fn(),
+                overrideSelectedServiceStatus: jest.fn(),
+                paused: false,
+                setPaused: jest.fn(),
+                togglePaused: jest.fn(),
+              }}
+            >
+              <BalanceProvider>{children}</BalanceProvider>
+            </ServicesContext.Provider>
+          </MasterWalletContext.Provider>
+        </PageStateContext.Provider>
       </OnlineStatusContext.Provider>
     </QueryClientProvider>
   );
@@ -156,6 +175,11 @@ describe('BalanceProvider', () => {
       expect(result.current.getStakedOlasBalanceOf(DEFAULT_EOA_ADDRESS)).toBe(
         0,
       );
+      expect(
+        result.current.getStakedOlasBalanceByServiceConfigId(
+          DEFAULT_SERVICE_CONFIG_ID,
+        ),
+      ).toBe(0);
     });
   });
 
@@ -621,6 +645,124 @@ describe('BalanceProvider', () => {
       expect(result.current.getStakedOlasBalanceOf('' as `0x${string}`)).toBe(
         0,
       );
+    });
+  });
+
+  describe('getStakedOlasBalanceByServiceConfigId', () => {
+    it('returns 0 for undefined serviceConfigId', async () => {
+      mockGetCrossChainBalances.mockResolvedValue({
+        walletBalances: [],
+        stakedBalances: [makeStakedBalance()],
+      });
+
+      const { result } = renderHook(() => useContext(BalanceContext), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoaded).toBe(true);
+      });
+      expect(
+        result.current.getStakedOlasBalanceByServiceConfigId(undefined),
+      ).toBe(0);
+    });
+
+    it('returns sum of bond + deposit for matching serviceConfigId', async () => {
+      const stakedBalances = [
+        makeStakedBalance({
+          serviceConfigId: DEFAULT_SERVICE_CONFIG_ID,
+          olasBondBalance: 10,
+          olasDepositBalance: 20,
+        }),
+      ];
+      mockGetCrossChainBalances.mockResolvedValue({
+        walletBalances: [],
+        stakedBalances,
+      });
+
+      const { result } = renderHook(() => useContext(BalanceContext), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoaded).toBe(true);
+      });
+      expect(
+        result.current.getStakedOlasBalanceByServiceConfigId(
+          DEFAULT_SERVICE_CONFIG_ID,
+        ),
+      ).toBe(30);
+    });
+
+    it('excludes sibling service on same chain', async () => {
+      const stakedBalances = [
+        makeStakedBalance({
+          serviceConfigId: DEFAULT_SERVICE_CONFIG_ID,
+          evmChainId: EvmChainIdMap.Gnosis,
+          olasBondBalance: 10,
+          olasDepositBalance: 20,
+        }),
+        makeStakedBalance({
+          serviceConfigId: MOCK_SERVICE_CONFIG_ID_3,
+          evmChainId: EvmChainIdMap.Gnosis,
+          olasBondBalance: 100,
+          olasDepositBalance: 200,
+        }),
+      ];
+      mockGetCrossChainBalances.mockResolvedValue({
+        walletBalances: [],
+        stakedBalances,
+      });
+
+      const { result } = renderHook(() => useContext(BalanceContext), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoaded).toBe(true);
+      });
+      // Only the target service's balance: 10+20 = 30
+      expect(
+        result.current.getStakedOlasBalanceByServiceConfigId(
+          DEFAULT_SERVICE_CONFIG_ID,
+        ),
+      ).toBe(30);
+      // Sibling independently returns its own balance: 100+200 = 300
+      expect(
+        result.current.getStakedOlasBalanceByServiceConfigId(
+          MOCK_SERVICE_CONFIG_ID_3,
+        ),
+      ).toBe(300);
+    });
+
+    it('returns same value as totalStakedOlasBalance when only one service is on chain', async () => {
+      const stakedBalances = [
+        makeStakedBalance({
+          serviceConfigId: DEFAULT_SERVICE_CONFIG_ID,
+          evmChainId: EvmChainIdMap.Gnosis,
+          olasBondBalance: 15,
+          olasDepositBalance: 25,
+        }),
+      ];
+      mockGetCrossChainBalances.mockResolvedValue({
+        walletBalances: [],
+        stakedBalances,
+      });
+
+      const { result } = renderHook(() => useContext(BalanceContext), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoaded).toBe(true);
+      });
+      // Single service: per-service sum equals chain-wide sum
+      expect(
+        result.current.getStakedOlasBalanceByServiceConfigId(
+          DEFAULT_SERVICE_CONFIG_ID,
+        ),
+      ).toBe(40);
+      expect(result.current.totalStakedOlasBalance).toBe(40);
     });
   });
 

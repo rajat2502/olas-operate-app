@@ -22,7 +22,7 @@ jest.mock(
   () => require('../mocks/ethersMulticall').ethersMulticallMock,
 );
 /* eslint-enable @typescript-eslint/no-var-requires */
-jest.mock('../../constants/providers', () => ({}));
+jest.mock('../../constants/providers', () => ({ PROVIDERS: {} }));
 
 describe('tokenBalancesToSentence', () => {
   it('returns empty string for empty object', () => {
@@ -191,6 +191,18 @@ describe('getFromToken', () => {
 
     const result = getFromToken(
       polygonUsdceAddress,
+      ETHEREUM_TOKEN_CONFIG,
+      POLYGON_TOKEN_CONFIG,
+    );
+    expect(result).toBe(ethereumUsdcAddress);
+  });
+
+  it('resolves pUSD on Polygon → USDC on Ethereum (bridge route for Polymarket)', () => {
+    const polygonPusdAddress = POLYGON_TOKEN_CONFIG.pUSD!.address! as Address;
+    const ethereumUsdcAddress = ETHEREUM_TOKEN_CONFIG.USDC!.address! as Address;
+
+    const result = getFromToken(
+      polygonPusdAddress,
       ETHEREUM_TOKEN_CONFIG,
       POLYGON_TOKEN_CONFIG,
     );
